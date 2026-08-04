@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <set>
 
 using namespace std;
 using filesystem::path;
@@ -14,13 +15,102 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-// напишите эту функцию
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
+bool ProcessFileRecursive(const path& current_file, 
+                          const vector<path>& include_dirs, 
+                          ostream& out, 
+                          set<path>& visited) {
+    ifstream in(current_file);
+    if (!in.is_open()) return false;
+
+    visited.insert(current_file);
+
+    regex re_quoted(R"re(\s*#\s*include\s*"([^"]*)"\s*)re");
+    regex re_angle(R"(\s*#\s*include\s*<([^>]*)>\s*)");
+                            
+    string line;
+    int line_num = 0;
+
+    while (getline(in, line)) {
+        ++line_num;
+        smatch match;
+
+        if (regex_match(line, match, re_quoted)) {
+            string inc_name = match[1];
+            
+            path found_path = current_file.parent_path() / inc_name;
+            if (!filesystem::exists(found_path)) {
+                found_path = "";
+                for (const auto& dir : include_dirs) {
+                    path try_path = dir / inc_name;
+                    if (filesystem::exists(try_path)) {
+                        found_path = try_path;
+                        break;
+                    }
+                }
+            }
+
+            if (found_path.empty()) {
+                cout << "unknown include file " << inc_name 
+                     << " at file " << current_file.string() 
+                     << " at line " << line_num << endl;
+                return false; 
+            }
+
+            if (!ProcessFileRecursive(found_path, include_dirs, out, visited)) {
+                return false;
+            }
+
+        } 
+        else if (regex_match(line, match, re_angle)) {
+            string inc_name = match[1];
+            path found_path;
+
+            for (const auto& dir : include_dirs) {
+                path try_path = dir / inc_name;
+                if (filesystem::exists(try_path)) {
+                    found_path = try_path;
+                    break;
+                }
+            }
+
+            if (found_path.empty()) {
+                cout << "unknown include file " << inc_name 
+                     << " at file " << current_file.string() 
+                     << " at line " << line_num << endl;
+                return false;
+            }
+
+            if (!ProcessFileRecursive(found_path, include_dirs, out, visited)) {
+                return false;
+            }
+        } 
+        else {
+            if (line.find("//") != 0) {
+                out << line << "\n";
+            }
+        }
+    }
+    return true;
+}
+
+bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+    if (!filesystem::exists(in_file)) {
+        return false;
+    }
+
+    ofstream out(out_file);
+    if (!out.is_open()) {
+        return false;
+    }
+
+    set<path> visited;
+
+    return ProcessFileRecursive(in_file, include_directories, out, visited);
+}
 
 string GetFileContents(string file) {
     ifstream stream(file);
 
-    // конструируем string по двум итераторам
     return {(istreambuf_iterator<char>(stream)), istreambuf_iterator<char>()};
 }
 
