@@ -8,6 +8,12 @@
 #include <vector>
 #include <set>
 
+void PrintIncludeError(const string& inc_name, const path& current_file, int line_num) {
+    cout << "unknown include file " << inc_name
+         << " at file " << current_file.string()
+         << " at line " << line_num << endl;
+}
+
 using namespace std;
 using filesystem::path;
 
@@ -20,14 +26,16 @@ bool ProcessFileRecursive(const path& current_file,
                           ostream& out, 
                           set<path>& visited) {
     ifstream in(current_file);
-    if (!in.is_open()) return false;
+    if (!in.is_open()) {
+        return false;
+    }
 
     visited.insert(current_file);
 
     regex re_quoted(R"re(\s*#\s*include\s*"([^"]*)"\s*)re");
     regex re_angle(R"(\s*#\s*include\s*<([^>]*)>\s*)");
                             
-    string line;
+    string line = "";
     int line_num = 0;
 
     while (getline(in, line)) {
@@ -50,9 +58,7 @@ bool ProcessFileRecursive(const path& current_file,
             }
 
             if (found_path.empty()) {
-                cout << "unknown include file " << inc_name 
-                     << " at file " << current_file.string() 
-                     << " at line " << line_num << endl;
+                PrintIncludeError(inc_name, current_file, line_num);
                 return false; 
             }
 
@@ -74,9 +80,7 @@ bool ProcessFileRecursive(const path& current_file,
             }
 
             if (found_path.empty()) {
-                cout << "unknown include file " << inc_name 
-                     << " at file " << current_file.string() 
-                     << " at line " << line_num << endl;
+                PrintIncludeError(inc_name, current_file, line_num);
                 return false;
             }
 
